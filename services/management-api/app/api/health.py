@@ -35,7 +35,7 @@ async def health_ready(db: AsyncSession = Depends(get_db)):
 
     try:
         await redis_client.ping()
-    except Exception:
+    except (redis.exceptions.RedisError, OSError):
         logger.exception("Readiness check failed: connection error")
         return JSONResponse(status_code=503, content={"status": "unavailable"})
 
