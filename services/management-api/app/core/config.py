@@ -10,6 +10,10 @@ ROOT_DIR = Path(__file__).resolve().parents[4]
 class Settings(BaseSettings):
     DATABASE_URL: str
     DB_ECHO: bool = False
+    SECRET_KEY: str
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REDIS_URL: str
 
     model_config = SettingsConfigDict(
         env_file=ROOT_DIR / ".env",
