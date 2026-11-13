@@ -67,13 +67,10 @@ async def refresh(
         db: AsyncSession = Depends(get_db)
 
 ):
-    uuid = await consume_refresh_token(redis, token.refresh_token)
-    print(uuid)
-    if uuid is None:
+    uid = await consume_refresh_token(redis, token.refresh_token)
+    if uid is None:
         raise HTTPException(status_code=401, detail="Invalid token")
-    print("2")
-    user = await db.scalar(select(User).where(User.id == uuid))
-    print("3")
+    user = await db.scalar(select(User).where(User.id == uid))
     if (user is None) or (not user.is_active):
         raise HTTPException(status_code=401, detail="Invalid token")
 

@@ -1,49 +1,33 @@
 import uuid
-import redis as rredis
+from redis.asyncio import Redis
 
 from app.core.config import settings
-from app.core.security import generate_refresh_token
+from app.core.security import generate_refresh_token, hash_refresh_token
 
 
-"""
-issue_refresh_token(redis, user_id) -> str: генерує токен, записує refresh:{хеш} зі значенням user_id і TTL, повертає сам токен;
-"""
-class RedisIssue(Exception):
-    pass
+REFRESH_PREFIX = "refresh:"
+
+def _refresh_key(raw_token: str) -> str:
+    return f"{REFRESH_PREFIX}{hash_refresh_token(raw_token)}"
 
 
-async def issue_refresh_token(redis, user_id) -> str:
+async def issue_refresh_token(redis: Redis, user_id) -> str:
     """ генерує токен, записує refresh:{хеш} зі значенням user_id і TTL, повертає сам токен"""
-    try:
-        token = generate_refresh_token()
-        await redis.set(f"refresh:{token}", f"{user_id}", ex=settings.REFRESH_TOKEN_EXPIRE_DAYS*24*3600)
-        return token
 
-    except rredis.ResponseError:
-        raise RedisIssue from None
+    raw_token = generate_refresh_token()
+    ttl_seconds = settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400
+    await redis.set(_refresh_key(raw_token), str(user_id), ex=ttl_seconds)
+    return raw_token
 
 
-    return token
+async def consume_refresh_token(redis: Redis, raw_token: str) -> uuid.UUID | None:
+    user_id_str = await redis.getdel(_refresh_key(raw_token))
+    if user_id_str is None:
+        return None
+    if isinstance(user_id_str, bytes):
+        user_id_str = user_id_str.decode("utf-8")
+    return uuid.UUID(user_id_str)
 
-"""
-consume_refresh_token(redis, token) -> uuid.UUID | None: атомарно дістає й видаляє запис, повертає user_id або None;
-revoke_refresh_token(redis, token) -> None: просто видаляє запис.
-"""
 
-async def consume_refresh_token(redis, token) -> uuid.UUID| None:
-    """атомарно дістає й видаляє запис, повертає user_id або None"""
-    try:
-        print(token)
-        r = await redis.getdel(f"refresh:{token}")
-
-    except rredis.ResponseError:
-        raise RedisIssue from None
-
-    return r
-
-async def revoke_refresh_token(redis, token) -> None:
-    """просто видаляє запис"""
-    try:
-        await redis.delete(f"refresh:{token}")
-    except rredis.ResponseError:
-        raise RedisIssue from None
+async def revoke_refresh_token(redis: Redis, raw_token: str) -> None:
+    await redis.delete(_refresh_key(raw_token))
